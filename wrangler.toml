@@ -1,0 +1,5 @@
+name = "hicham-translator-server"
+compatibility_date = "2026-09-16"
+
+[build]
+command = "pip install -r requirements.txt"

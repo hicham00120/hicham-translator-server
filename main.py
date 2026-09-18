@@ -7,8 +7,18 @@ import tempfile
 
 app = FastAPI(
     title="HICHAM TRANSLATOR API",
-    version="2.1.0"
+    version="2.1.1"
 )
+
+
+MIME_TYPES = {
+    ".m4a": "audio/mp4",
+    ".mp4": "audio/mp4",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+    ".webm": "audio/webm",
+}
 
 
 @app.get("/")
@@ -17,6 +27,13 @@ def home():
         "status": "online",
         "service": "HICHAM TRANSLATOR",
         "engine": "Google Gemini"
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok"
     }
 
 
@@ -49,14 +66,17 @@ async def translate_audio(
                 }
             )
 
-        # تحديد امتداد الملف
         filename = audio.filename or "audio.m4a"
-        extension = os.path.splitext(filename)[1]
+        extension = os.path.splitext(filename)[1].lower()
 
         if not extension:
             extension = ".m4a"
 
-        # إنشاء ملف مؤقت على Render
+        mime_type = MIME_TYPES.get(
+            extension,
+            audio.content_type or "audio/mp4"
+        )
+
         with tempfile.NamedTemporaryFile(
             delete=False,
             suffix=extension
@@ -64,22 +84,21 @@ async def translate_audio(
             temp_file.write(audio_data)
             temp_path = temp_file.name
 
-        # الاتصال بـ Gemini
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(
+            api_key=api_key
+        )
 
-        # رفع الملف إلى Gemini
         uploaded_file = client.files.upload(
             file=temp_path
         )
 
-        # تحويل الصوت إلى نص
         interaction = client.interactions.create(
             model="gemini-3.5-transcribe",
             input=[
                 {
                     "type": "audio",
                     "uri": uploaded_file.uri,
-                    "mime_type": audio.content_type or "audio/mp4"
+                    "mime_type": mime_type
                 }
             ]
         )
@@ -87,10 +106,11 @@ async def translate_audio(
         text = interaction.output_text or ""
 
         return JSONResponse(
-            {
+            status_code=200,
+            content={
                 "success": True,
-                "filename": audio.filename,
-                "content_type": audio.content_type,
+                "filename": filename,
+                "content_type": mime_type,
                 "size_bytes": len(audio_data),
                 "text": text
             }
@@ -106,7 +126,6 @@ async def translate_audio(
         )
 
     finally:
-        # حذف الملف المؤقت من Render
         if temp_path and os.path.exists(temp_path):
             try:
                 os.remove(temp_path)

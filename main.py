@@ -1,11 +1,11 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
-from openai import OpenAI
+from google import genai
 import os
 
 app = FastAPI(
     title="HICHAM TRANSLATOR API",
-    version="1.0.0"
+    version="2.0.0"
 )
 
 
@@ -13,7 +13,8 @@ app = FastAPI(
 def home():
     return {
         "status": "online",
-        "service": "HICHAM TRANSLATOR"
+        "service": "HICHAM TRANSLATOR",
+        "engine": "Google Gemini"
     }
 
 
@@ -22,18 +23,16 @@ async def translate_audio(
     audio: UploadFile = File(...)
 ):
     try:
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
 
         if not api_key:
             return JSONResponse(
                 status_code=500,
                 content={
                     "success": False,
-                    "error": "OPENAI_API_KEY غير موجود في Render"
+                    "error": "GEMINI_API_KEY غير موجود في Render"
                 }
             )
-
-        client = OpenAI(api_key=api_key)
 
         audio_data = await audio.read()
 
@@ -46,16 +45,24 @@ async def translate_audio(
                 }
             )
 
-        transcription = client.audio.transcriptions.create(
-            model="gpt-4o-mini-transcribe",
-            file=(
-                audio.filename or "audio.m4a",
-                audio_data,
-                audio.content_type or "audio/m4a"
-            )
+        client = genai.Client(api_key=api_key)
+
+        uploaded_file = client.files.upload(
+            file=audio_data,
+            config={
+                "mime_type": audio.content_type or "audio/mp4"
+            }
         )
 
-        text = transcription.text
+        response = client.models.generate_content(
+            model="gemini-3.5-transcribe",
+            contents=[
+                uploaded_file,
+                "Transcribe this audio exactly. Detect the spoken language automatically. Return only the transcription text."
+            ]
+        )
+
+        text = response.text or ""
 
         return JSONResponse(
             {

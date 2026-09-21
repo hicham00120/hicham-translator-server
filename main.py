@@ -6,7 +6,7 @@ import os
 
 app = FastAPI(
     title="HICHAM TRANSLATOR API",
-    version="2.1.5"
+    version="2.1.6"
 )
 
 @app.get("/")
@@ -24,11 +24,11 @@ async def translate_audio(audio: UploadFile = File(...)):
         if not api_key:
             return JSONResponse(
                 status_code=500,
-                content={"success": False, "error": "No API Key"}
+                content={"success": False, "error": "GEMINI_API_KEY مفقود في Render"}
             )
 
         audio_data = await audio.read()
-        if not audio_data or len(audio_data) < 2000:
+        if not audio_data or len(audio_data) == 0:
             return JSONResponse(
                 status_code=200,
                 content={"success": True, "text": ""}
@@ -41,23 +41,21 @@ async def translate_audio(audio: UploadFile = File(...)):
             mime_type="audio/wav"
         )
 
-        # برومت فائق السرعة ومباشر للترجمة اللحظية بالدارجة
         prompt = (
-            "Live subtitle mode: Translate spoken English to Algerian Darija (Arabic letters). "
-            "Output ONLY the translated words. No intro, no explanations. "
-            "If silence, noise, or music, return completely empty."
+            "Translate any spoken speech in this short video clip directly into Algerian Darija (Arabic script). "
+            "Output ONLY the translated words. If there is no clear speech, return nothing."
         )
 
         response = client.models.generate_content(
             model="gemini-3.6-flash",
             contents=[audio_part, prompt],
             config=types.GenerateContentConfig(
-                temperature=0.1,
-                max_output_tokens=60
+                temperature=0.2
             )
         )
 
         text = (response.text or "").strip()
+        print("Gemini result:", text)
 
         return JSONResponse(
             status_code=200,
@@ -68,10 +66,12 @@ async def translate_audio(audio: UploadFile = File(...)):
         )
 
     except Exception as e:
+        print("GEMINI ERROR:", str(e))
         return JSONResponse(
             status_code=200,
             content={
                 "success": False,
+                "error": str(e),
                 "text": ""
             }
         )

@@ -35,7 +35,7 @@ async def translate_audio(audio: UploadFile = File(...)):
                 }
             )
 
-        # 2. قراءة بيانات الصوت في الذاكرة مباشرة
+        # 2. قراءة بيانات الصوت مباشرة في الذاكرة
         audio_data = await audio.read()
         if not audio_data:
             return JSONResponse(
@@ -46,10 +46,10 @@ async def translate_audio(audio: UploadFile = File(...)):
                 }
             )
 
-        # 3. إنشاء كائن Gemini Client
+        # 3. إعداد عميل Gemini
         client = genai.Client(api_key=api_key)
 
-        # 4. إعداد الصوت مباشرة من الـ Bytes (سريع جداً وبلا ملفات مؤقتة)
+        # 4. تجهيز الصوت كبيانات بايت مباشرة
         audio_part = types.Part.from_bytes(
             data=audio_data,
             mime_type="audio/wav"
@@ -61,16 +61,15 @@ async def translate_audio(audio: UploadFile = File(...)):
             "Keep it natural and concise. If there is only background noise or music with no clear speech, return nothing."
         )
 
-        # 5. استدعاء الموديل الرسمي والسريع
+        # 5. استدعاء الموديل المحدث والمطلوب
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=[audio_part, prompt]
         )
 
         text = (response.text or "").strip()
         print("Gemini transcription (Darija):", text)
 
-        # إذا كان غير حس/موسيقى ورجع فارغ، نرجع success: true مع نص فارغ عادي باش التطبيق ما يتبلوكاش
         return JSONResponse(
             status_code=200,
             content={

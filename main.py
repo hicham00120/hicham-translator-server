@@ -6,7 +6,7 @@ import os
 
 app = FastAPI(
     title="HICHAM TRANSLATOR API",
-    version="2.1.6"
+    version="2.2.0"
 )
 
 @app.get("/")
@@ -24,11 +24,11 @@ async def translate_audio(audio: UploadFile = File(...)):
         if not api_key:
             return JSONResponse(
                 status_code=500,
-                content={"success": False, "error": "GEMINI_API_KEY مفقود في Render"}
+                content={"success": False, "error": "GEMINI_API_KEY مفقود"}
             )
 
         audio_data = await audio.read()
-        if not audio_data or len(audio_data) == 0:
+        if not audio_data:
             return JSONResponse(
                 status_code=200,
                 content={"success": True, "text": ""}
@@ -42,20 +42,44 @@ async def translate_audio(audio: UploadFile = File(...)):
         )
 
         prompt = (
-            "Translate any spoken speech in this short video clip directly into Algerian Darija (Arabic script). "
-            "Output ONLY the translated words. If there is no clear speech, return nothing."
+            "Translate this short English audio directly into concise Algerian Darija (Arabic letters). "
+            "Output ONLY the translated speech. If silence, music, or unclear noise, output nothing."
         )
 
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=[audio_part, prompt],
-            config=types.GenerateContentConfig(
-                temperature=0.2
+        # قائمة موديلات مجانية بحصص يومية كبيرة (تصل لـ 1500 طلب يومياً)
+        models_pool = [
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-2.5-flash"
+        ]
+
+        text = ""
+        last_error = ""
+
+        for model_name in models_pool:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[audio_part, prompt],
+                    config=types.GenerateContentConfig(
+                        temperature=0.1,
+                        max_output_tokens=60
+                    )
+                )
+                text = (response.text or "").strip()
+                last_error = ""
+                break
+            except Exception as err:
+                last_error = str(err)
+                print(f"Error with {model_name}: {last_error}")
+                continue
+
+        if last_error and not text:
+            # إذا استنفدت الحصة تماماً، نرجع نص فارغ باش ما نعطلوش الشاشة برسالة خطأ طويلة
+            return JSONResponse(
+                status_code=200,
+                content={"success": True, "text": ""}
             )
-        )
-
-        text = (response.text or "").strip()
-        print("Gemini result:", text)
 
         return JSONResponse(
             status_code=200,
@@ -66,12 +90,8 @@ async def translate_audio(audio: UploadFile = File(...)):
         )
 
     except Exception as e:
-        print("GEMINI ERROR:", str(e))
+        print("SYSTEM ERROR:", str(e))
         return JSONResponse(
             status_code=200,
-            content={
-                "success": False,
-                "error": str(e),
-                "text": ""
-            }
+            content={"success": True, "text": ""}
         )

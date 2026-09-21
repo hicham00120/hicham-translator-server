@@ -6,7 +6,7 @@ import os
 
 app = FastAPI(
     title="HICHAM TRANSLATOR API",
-    version="2.1.2"
+    version="2.1.3"
 )
 
 @app.get("/")
@@ -24,7 +24,6 @@ def health():
 @app.post("/translate")
 async def translate_audio(audio: UploadFile = File(...)):
     try:
-        # 1. التحقق من مفتاح الـ API
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             return JSONResponse(
@@ -35,7 +34,6 @@ async def translate_audio(audio: UploadFile = File(...)):
                 }
             )
 
-        # 2. قراءة بيانات الصوت مباشرة في الذاكرة
         audio_data = await audio.read()
         if not audio_data:
             return JSONResponse(
@@ -46,29 +44,44 @@ async def translate_audio(audio: UploadFile = File(...)):
                 }
             )
 
-        # 3. إعداد عميل Gemini
         client = genai.Client(api_key=api_key)
 
-        # 4. تجهيز الصوت كبيانات بايت مباشرة
         audio_part = types.Part.from_bytes(
             data=audio_data,
             mime_type="audio/wav"
         )
 
         prompt = (
-            "Listen to this audio chunk from a video. "
-            "Translate what is spoken directly into Algerian Darija (using Arabic script). "
-            "Keep it natural and concise. If there is only background noise or music with no clear speech, return nothing."
+            "Translate this short audio clip immediately into Algerian Darija (Arabic script). "
+            "Output ONLY the translated spoken words concisely. "
+            "If it is silence, noise, or music, return an empty response."
         )
 
-        # 5. استدعاء الموديل المحدث والمطلوب
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=[audio_part, prompt]
-        )
+        # تجربة الموديل الموصى به أولاً، ثم الموديل الاحتياطي
+        models_to_try = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
+        response_text = ""
+        last_error = None
 
-        text = (response.text or "").strip()
-        print("Gemini transcription (Darija):", text)
+        for model_name in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[audio_part, prompt]
+                )
+                response_text = (response.text or "").strip()
+                break
+            except Exception as ex:
+                last_error = str(ex)
+                continue
+
+        if not response_text and last_error and "404" in last_error:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "error": f"Model error: {last_error}"
+                }
+            )
 
         return JSONResponse(
             status_code=200,
@@ -76,7 +89,7 @@ async def translate_audio(audio: UploadFile = File(...)):
                 "success": True,
                 "filename": audio.filename or "audio.wav",
                 "size_bytes": len(audio_data),
-                "text": text
+                "text": response_text
             }
         )
 

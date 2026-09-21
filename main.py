@@ -25,16 +25,31 @@ async def translate_audio(audio: UploadFile = File(...)):
         audio_part = types.Part.from_bytes(data=audio_data, mime_type="audio/wav")
 
         prompt = (
-            "Translate what is spoken in this audio directly into Algerian Darija (Arabic script). "
-            "Output ONLY the translated words. If it is only music or noise, write: (موسيقى)"
+            "Translate this short English audio directly into Algerian Darija (Arabic script). "
+            "Output ONLY the translated words. If it is only music or noise, return (موسيقى)"
         )
 
+        # استخراج الموديل المتاح في حسابك تلقائياً لتفادي أي خطأ 404
+        selected_model = None
+        try:
+            for m in client.models.list():
+                m_name = getattr(m, "name", "")
+                if "flash" in m_name.lower():
+                    selected_model = m_name
+                    break
+        except Exception:
+            pass
+
+        # إذا تعذر الفحص نعتمد الموديل القياسي الأكثر توفراً
+        if not selected_model:
+            selected_model = "gemini-2.5-flash"
+
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model=selected_model,
             contents=[audio_part, prompt],
             config=types.GenerateContentConfig(
                 temperature=0.2,
-                max_output_tokens=80
+                max_output_tokens=70
             )
         )
 
@@ -45,6 +60,6 @@ async def translate_audio(audio: UploadFile = File(...)):
         return JSONResponse(status_code=200, content={"success": True, "text": text})
 
     except Exception as e:
-        error_msg = str(e)
-        print("ERROR:", error_msg)
-        return JSONResponse(status_code=200, content={"success": True, "text": f"⚠️ {error_msg[:60]}"})
+        err = str(e)
+        print("API ERROR:", err)
+        return JSONResponse(status_code=200, content={"success": True, "text": f"⚠️ {err[:65]}"})

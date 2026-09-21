@@ -6,16 +6,12 @@ import os
 
 app = FastAPI(
     title="HICHAM TRANSLATOR API",
-    version="2.1.4"
+    version="2.1.5"
 )
 
 @app.get("/")
 def home():
-    return {
-        "status": "online",
-        "service": "HICHAM TRANSLATOR",
-        "engine": "Google Gemini"
-    }
+    return {"status": "online"}
 
 @app.get("/health")
 def health():
@@ -28,20 +24,14 @@ async def translate_audio(audio: UploadFile = File(...)):
         if not api_key:
             return JSONResponse(
                 status_code=500,
-                content={
-                    "success": False,
-                    "error": "GEMINI_API_KEY غير موجود في إعدادات Render"
-                }
+                content={"success": False, "error": "No API Key"}
             )
 
         audio_data = await audio.read()
-        if not audio_data or len(audio_data) < 1000:
+        if not audio_data or len(audio_data) < 2000:
             return JSONResponse(
                 status_code=200,
-                content={
-                    "success": True,
-                    "text": ""
-                }
+                content={"success": True, "text": ""}
             )
 
         client = genai.Client(api_key=api_key)
@@ -51,20 +41,23 @@ async def translate_audio(audio: UploadFile = File(...)):
             mime_type="audio/wav"
         )
 
+        # برومت فائق السرعة ومباشر للترجمة اللحظية بالدارجة
         prompt = (
-            "You are a real-time translator. "
-            "Translate any spoken English speech in this audio immediately into concise Algerian Darija (in Arabic alphabet). "
-            "Translate strictly what is said. If there is no speech, silence, or just music, reply with nothing."
+            "Live subtitle mode: Translate spoken English to Algerian Darija (Arabic letters). "
+            "Output ONLY the translated words. No intro, no explanations. "
+            "If silence, noise, or music, return completely empty."
         )
 
-        # الموديل الموصى به
         response = client.models.generate_content(
             model="gemini-3.6-flash",
-            contents=[audio_part, prompt]
+            contents=[audio_part, prompt],
+            config=types.GenerateContentConfig(
+                temperature=0.1,
+                max_output_tokens=60
+            )
         )
 
         text = (response.text or "").strip()
-        print("Translated:", text)
 
         return JSONResponse(
             status_code=200,
@@ -75,15 +68,10 @@ async def translate_audio(audio: UploadFile = File(...)):
         )
 
     except Exception as e:
-        error_message = str(e)
-        print("GEMINI ERROR:", error_message)
-        
-        # تجنب إرجاع 500 لإبقاء التطبيق شغال بسلاسة
         return JSONResponse(
             status_code=200,
             content={
                 "success": False,
-                "error": error_message,
                 "text": ""
             }
         )

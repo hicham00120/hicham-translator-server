@@ -6,7 +6,7 @@ import os
 
 app = FastAPI(
     title="HICHAM TRANSLATOR API",
-    version="2.1.3"
+    version="2.1.4"
 )
 
 @app.get("/")
@@ -35,12 +35,12 @@ async def translate_audio(audio: UploadFile = File(...)):
             )
 
         audio_data = await audio.read()
-        if not audio_data:
+        if not audio_data or len(audio_data) < 1000:
             return JSONResponse(
-                status_code=400,
+                status_code=200,
                 content={
-                    "success": False,
-                    "error": "ملف الصوت فارغ"
+                    "success": True,
+                    "text": ""
                 }
             )
 
@@ -52,54 +52,38 @@ async def translate_audio(audio: UploadFile = File(...)):
         )
 
         prompt = (
-            "Translate this short audio clip immediately into Algerian Darija (Arabic script). "
-            "Output ONLY the translated spoken words concisely. "
-            "If it is silence, noise, or music, return an empty response."
+            "You are a real-time translator. "
+            "Translate any spoken English speech in this audio immediately into concise Algerian Darija (in Arabic alphabet). "
+            "Translate strictly what is said. If there is no speech, silence, or just music, reply with nothing."
         )
 
-        # تجربة الموديل الموصى به أولاً، ثم الموديل الاحتياطي
-        models_to_try = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
-        response_text = ""
-        last_error = None
+        # الموديل الموصى به
+        response = client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=[audio_part, prompt]
+        )
 
-        for model_name in models_to_try:
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=[audio_part, prompt]
-                )
-                response_text = (response.text or "").strip()
-                break
-            except Exception as ex:
-                last_error = str(ex)
-                continue
-
-        if not response_text and last_error and "404" in last_error:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "success": False,
-                    "error": f"Model error: {last_error}"
-                }
-            )
+        text = (response.text or "").strip()
+        print("Translated:", text)
 
         return JSONResponse(
             status_code=200,
             content={
                 "success": True,
-                "filename": audio.filename or "audio.wav",
-                "size_bytes": len(audio_data),
-                "text": response_text
+                "text": text
             }
         )
 
     except Exception as e:
         error_message = str(e)
         print("GEMINI ERROR:", error_message)
+        
+        # تجنب إرجاع 500 لإبقاء التطبيق شغال بسلاسة
         return JSONResponse(
-            status_code=500,
+            status_code=200,
             content={
                 "success": False,
-                "error": error_message
+                "error": error_message,
+                "text": ""
             }
         )

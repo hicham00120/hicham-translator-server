@@ -18,15 +18,15 @@ async def translate_audio(audio: UploadFile = File(...)):
             return JSONResponse(status_code=200, content={"success": True, "text": "⚠️ مفتاح API مفقود"})
 
         audio_data = await audio.read()
-        if not audio_data or len(audio_data) < 2000:
-            return JSONResponse(status_code=200, content={"success": True, "text": ""})
+        if not audio_data:
+            return JSONResponse(status_code=200, content={"success": True, "text": "⚠️ لا توجد بيانات صوتية"})
 
         client = genai.Client(api_key=api_key)
         audio_part = types.Part.from_bytes(data=audio_data, mime_type="audio/wav")
 
         prompt = (
-            "Translate this audio to Algerian Darija using Arabic alphabet. "
-            "Output strictly the translated words only. No commentary."
+            "Translate what is spoken in this audio directly into Algerian Darija (Arabic script). "
+            "Output ONLY the translated words. If it is only music or noise, write: (موسيقى)"
         )
 
         response = client.models.generate_content(
@@ -34,12 +34,17 @@ async def translate_audio(audio: UploadFile = File(...)):
             contents=[audio_part, prompt],
             config=types.GenerateContentConfig(
                 temperature=0.2,
-                max_output_tokens=60
+                max_output_tokens=80
             )
         )
 
         text = (response.text or "").strip()
+        if not text:
+            text = "(صوت غير مفهوم)"
+
         return JSONResponse(status_code=200, content={"success": True, "text": text})
 
     except Exception as e:
-        return JSONResponse(status_code=200, content={"success": True, "text": ""})
+        error_msg = str(e)
+        print("ERROR:", error_msg)
+        return JSONResponse(status_code=200, content={"success": True, "text": f"⚠️ {error_msg[:60]}"})
